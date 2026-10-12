@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>🌿 Greenery — Магазин мебели</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; padding: 20px; background: #f5f7fa; }
+    h1 { color: #264A51; }
+    h2 { color: #264A51; border-bottom: 2px solid #71B3C6; padding-bottom: 6px; margin-top: 25px; }
+    .product { border: 1px solid #ccc; padding: 15px; margin: 10px 0; border-radius: 8px; background: white; }
+    .product h3 { margin: 0 0 8px 0; color: #264A51; }
+    .product.out { opacity: 0.5; }
+    button { background: #264A51; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; margin: 3px; }
+    button:hover { background: #3C6C7F; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    .orders { background: white; padding: 15px; border-radius: 8px; }
+    .order { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #eee; align-items: center; }
+    .error { color: #c62828; padding: 8px; margin: 10px 0; background: #ffe6e6; border-radius: 5px; }
+    .success { color: #2e7d32; padding: 8px; margin: 10px 0; background: #e6ffe6; border-radius: 5px; }
+    .stats { display: flex; gap: 15px; flex-wrap: wrap; }
+    .stat { flex: 1; min-width: 150px; padding: 15px; background: white; border-radius: 8px; text-align: center; }
+    .stat .value { font-size: 24px; font-weight: 700; color: #264A51; }
+    input, select { padding: 8px; border: 1px solid #ccc; border-radius: 5px; margin: 5px; }
+  </style>
+</head>
+<body>
+
+  <h1>🌿 Greenery — Магазин мебели</h1>
+  <div id="message"></div>
+
+  <h2>📦 Товары</h2>
+  <div id="products">Загрузка...</div>
+
+  <h2>🛒 Оформить заказ</h2>
+  <form id="orderForm">
+    <select id="productSelect"></select>
+    <input type="number" id="quantityInput" value="1" min="1" placeholder="Кол-во">
+    <button type="submit">Оформить</button>
+  </form>
+
+  <h2>📊 Статистика</h2>
+  <div class="stats">
+    <div class="stat"><div class="value" id="statOrders">0</div><div>Заказов</div></div>
+    <div class="stat"><div class="value" id="statSum">£0</div><div>Сумма</div></div>
+    <div class="stat"><div class="value" id="statAvg">£0</div><div>Средний</div></div>
+  </div>
+
+  <h2>📋 Заказы</h2>
+  <div id="orders" class="orders">Загрузка...</div>
+
+  <h2>📥 Скачать заказы</h2>
+  <button onclick="download('json')">📥 JSON</button>
+  <button onclick="download('xml')">📥 XML</button>
+  <button onclick="download('html')">📥 HTML</button>
+
+  <h2>🔀 Формат по Accept</h2>
+  <button onclick="loadFormat('application/json')">JSON</button>
+  <button onclick="loadFormat('application/xml')">XML</button>
+  <button onclick="loadFormat('text/html')">HTML</button>
+  <pre id="formatResult" style="display:none; background:#1e1e1e; color:#d4d4d4; padding:15px; border-radius:8px; max-height:300px; overflow:auto; font-size:13px;"></pre>
+
+  <script>
+    function showMessage(text, isError = false) {
+      const div = document.getElementById('message');
+      div.textContent = text;
+      div.className = isError ? 'error' : 'success';
+      setTimeout(() => { div.textContent = ''; div.className = ''; }, 3000);
+    }
+
+    async function loadProducts() {
+      try {
+        const res = await fetch('/api/products');
+        const products = await res.json();
+        document.getElementById('products').innerHTML = products.map(p =>
+          `<div class="product ${p.inStock ? '' : 'out'}">
+            <h3>${p.name}</h3>
+            <p>${p.category} — £${p.price} — ${p.inStock ? '✅ В наличии' : '❌ Нет'}</p>
+            <button onclick="quickOrder(${p.id})" ${p.inStock ? '' : 'disabled'}>Заказать</button>
+          </div>`
+        ).join('');
+
+        document.getElementById('productSelect').innerHTML =
+          '<option value="">— выберите —</option>' +
+          products.map(p => `<option value="${p.id}" ${p.inStock ? '' : 'disabled'}>${p.name} — £${p.price}</option>`).join('');
+      } catch (err) {
+        document.getElementById('products').innerHTML = '<div class="error">Ошибка загрузки</div>';
+      }
+    }
+
+    async function loadOrders() {
+      const res = await fetch('/api/orders');
+      const orders = await res.json();
+      document.getElementById('orders').innerHTML = orders.length === 0
+        ? '<p>Заказов нет</p>'
+        : orders.map(o => `<div class="order">
+            <span>#${o.id} — ${o.productName} × ${o.quantity} = £${o.total}</span>
+            <button onclick="cancelOrder(${o.id})">❌ Отменить</button>
+          </div>`).join('');
+    }
+
+    async function loadStats() {
+      const res = await fetch('/api/stats', { method: 'POST' });
+      const s = await res.json();
+      document.getElementById('statOrders').textContent = s.totalOrders;
+      document.getElementById('statSum').textContent = '£' + s.totalSum.toFixed(2);
+      document.getElementById('statAvg').textContent = '£' + s.averageOrder.toFixed(2);
+    }
+
+    document.getElementById('orderForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const productId = document.getElementById('productSelect').value;
+      const quantity = document.getElementById('quantityInput').value;
+      if (!productId) { showMessage('Выберите товар', true); return; }
+      await sendOrder(productId, quantity);
+    });
+
+    async function quickOrder(id) {
+      const q = prompt('Количество:', '1');
+      if (!q || q < 1) return;
+      await sendOrder(id, q);
+    }
+
+    async function sendOrder(productId, quantity) {
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, quantity })
+      });
+      const data = await res.json();
+      if (!res.ok) { showMessage(data.error, true); return; }
+      showMessage('✅ Заказ оформлен');
+      loadOrders();
+      loadStats();
+    }
+
+    async function cancelOrder(id) {
+      if (!confirm(`Отменить заказ #${id}?`)) return;
+      const res = await fetch('/api/orders/' + id, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) { showMessage(data.error, true); return; }
+      showMessage('🗑️ Заказ отменён');
+      loadOrders();
+      loadStats();
+    }
+
+    function download(format) {
+      window.location.href = '/api/download/' + format;
+    }
+
+    async function loadFormat(accept) {
+      const pre = document.getElementById('formatResult');
+      pre.style.display = 'block';
+      pre.textContent = 'Загрузка...';
+      const res = await fetch('/api/products-format', { headers: { 'Accept': accept } });
+      pre.textContent = await res.text();
+    }
+
+    loadProducts();
+    loadOrders();
+    loadStats();
+  </script>
+</body>
+</html>

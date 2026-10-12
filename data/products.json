@@ -1,0 +1,7 @@
+[
+  { "id": 1, "name": "Диван", "category": "sofa", "price": 899, "inStock": true },
+  { "id": 2, "name": "Стол", "category": "kitchen", "price": 450, "inStock": true },
+  { "id": 3, "name": "Кровать", "category": "bedroom", "price": 1200, "inStock": false },
+  { "id": 4, "name": "Зеркало", "category": "decor", "price": 120, "inStock": true },
+  { "id": 5, "name": "Шкаф", "category": "bedroom", "price": 950, "inStock": true }
+]
