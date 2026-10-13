@@ -1,1 +1,11 @@
-[]
+[
+  {
+    "id": 1,
+    "productId": 1,
+    "productName": "Диван",
+    "price": 899,
+    "quantity": 1,
+    "total": 899,
+    "createdAt": "2026-10-13T08:51:05.783Z"
+  }
+]
